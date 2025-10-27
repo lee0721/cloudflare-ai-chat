@@ -672,6 +672,9 @@ function renderSessionList() {
       session.id === activeSessionId ? " active" : ""
     }`;
 
+    const textWrap = document.createElement("div");
+    textWrap.className = "session-item-text";
+
     const titleEl = document.createElement("span");
     titleEl.className = "session-item-title";
     titleEl.textContent = session.title || DEFAULT_SESSION_TITLE;
@@ -680,8 +683,21 @@ function renderSessionList() {
     metaEl.className = "session-item-meta";
     metaEl.textContent = formatTimestamp(session.updatedAt);
 
-    button.appendChild(titleEl);
-    button.appendChild(metaEl);
+    textWrap.appendChild(titleEl);
+    textWrap.appendChild(metaEl);
+    button.appendChild(textWrap);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "session-item-delete";
+    deleteBtn.setAttribute("aria-label", "Delete conversation");
+    deleteBtn.textContent = "✕";
+    deleteBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void deleteSession(session.id);
+    });
+
+    button.appendChild(deleteBtn);
 
     button.addEventListener("click", () => {
       if (session.id !== activeSessionId) {
@@ -842,5 +858,54 @@ function updateModelSelectionUI() {
   ensureModelOptionExists(modelId);
   if (modelSelect.value !== modelId) {
     modelSelect.value = modelId;
+  }
+}
+
+async function deleteSession(sessionId) {
+  const session = sessions.find((item) => item.id === sessionId);
+  if (!session) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Delete conversation "${session.title || DEFAULT_SESSION_TITLE}"?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `/api/session?sessionId=${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" },
+    );
+    if (!response.ok) {
+      throw new Error(`Delete failed with status ${response.status}`);
+    }
+  } catch (error) {
+    console.error("Failed to delete session:", error);
+    window.alert("Failed to delete conversation. Please try again.");
+    return;
+  }
+
+  sessions = sessions.filter((item) => item.id !== sessionId);
+  persistSessions();
+
+  const wasActive = sessionId === activeSessionId;
+  if (!sessions.length) {
+    const newSession = createSessionRecord();
+    sessions.unshift(newSession);
+    activeSessionId = newSession.id;
+    persistSessions();
+    renderSessionList();
+    initializeChat();
+    return;
+  }
+
+  renderSessionList();
+  if (wasActive) {
+    setActiveSession(sessions[0].id);
+  } else {
+    updateModelSelectionUI();
   }
 }

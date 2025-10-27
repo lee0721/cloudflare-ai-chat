@@ -74,6 +74,26 @@ export default {
       return new Response("Method not allowed", { status: 405 });
     }
 
+    if (url.pathname === "/api/session") {
+      if (request.method !== "DELETE") {
+        return new Response("Method not allowed", { status: 405 });
+      }
+
+      const sessionId = url.searchParams.get("sessionId");
+      if (!sessionId) {
+        return jsonResponse({ error: "Missing sessionId" }, 400);
+      }
+
+      try {
+        const stub = env.SESSIONS.get(env.SESSIONS.idFromName(sessionId));
+        await stub.fetch("https://session", { method: "DELETE" });
+        return new Response(null, { status: 204 });
+      } catch (error) {
+        console.error("Failed to delete session:", error);
+        return jsonResponse({ error: "Unable to delete session" }, 500);
+      }
+    }
+
     if (url.pathname === "/api/chat") {
       // Handle POST requests for chat
       if (request.method === "POST") {
@@ -896,8 +916,14 @@ export class SessionDurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
+    if (request.method === "DELETE") {
+      await this.state.storage.delete(SESSION_STORAGE_KEY);
+      await this.state.storage.delete("messages");
+      return new Response(null, { status: 204 });
+    }
+
     if (request.method === "GET" && url.pathname === "/messages") {
-        const session = await this.getSessionRecord();
+      const session = await this.getSessionRecord();
 
       return new Response(
         JSON.stringify({
